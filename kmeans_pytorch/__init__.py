@@ -32,7 +32,7 @@ def kmeans(
     :param device: (torch.device) device [default: cpu]
     :return: (torch.tensor, torch.tensor) cluster ids, cluster centers
     """
-    print(f'running k-means on {device}..')
+    #print(f'running k-means on {device}..')
 
     if distance == 'euclidean':
         pairwise_distance_function = pairwise_distance
@@ -42,16 +42,22 @@ def kmeans(
         raise NotImplementedError
 
     # convert to float
-    X = X.float()
+    # Removed for speed
+    #X = X.float()
 
     # transfer to device
-    X = X.to(device)
+    # Removed for speed
+    #X = X.to(device)
 
     # initialize
     initial_state = initialize(X, num_clusters)
 
+    original_state = initial_state.clone()
+
     iteration = 0
-    tqdm_meter = tqdm(desc='[running kmeans]')
+    
+    # Removed for Speed
+    #tqdm_meter = tqdm(desc='[running kmeans]')
     while True:
         dis = pairwise_distance_function(X, initial_state)
 
@@ -59,31 +65,59 @@ def kmeans(
 
         initial_state_pre = initial_state.clone()
 
+        
         for index in range(num_clusters):
             selected = torch.nonzero(choice_cluster == index).squeeze().to(device)
+            #selected = torch.nonzero(choice_cluster == index).squeeze()
 
-            selected = torch.index_select(X, 0, selected)
-            initial_state[index] = selected.mean(dim=0)
+            if selected.nelement() == 0:
+                """
+                print("\n\t%d" %iteration)
+                print(initial_state_pre.shape)
+                print(X.shape)
+                print(initial_state_pre.unsqueeze(1).shape)
+                print(torch.norm(X - original_state.unsqueeze(1), p=2, dim=2))
+                #print(pairwise_distance_function(X, initial_state_pre))
+                print(torch.argmin(pairwise_distance_function(X, original_state), dim=1))
+                print(initial_state)
+                #print(dis)
+                print(choice_cluster)
+                raise ValueError("Broken here")
+                selected = torch.index_select(X, 0, selected)
+                """
+                indices = np.random.choice(X.shape[0], 1, replace=False)
+                initial_state[index] = X[indices]
+            else:
+                selected = torch.index_select(X, 0, selected)
+
+                initial_state[index] = selected.mean(dim=0)
+                #initial_state[index] = selected.sum(dim=0) / selected.shape[0]
 
         center_shift = torch.sum(
             torch.sqrt(
                 torch.sum((initial_state - initial_state_pre) ** 2, dim=1)
             ))
-
+         
         # increment iteration
         iteration = iteration + 1
 
         # update tqdm meter
+        """
         tqdm_meter.set_postfix(
             iteration=f'{iteration}',
             center_shift=f'{center_shift ** 2:0.6f}',
             tol=f'{tol:0.6f}'
         )
         tqdm_meter.update()
+        """
+
         if center_shift ** 2 < tol:
             break
 
-    return choice_cluster.cpu(), initial_state.cpu()
+        if torch.isnan(center_shift).any():
+            break
+
+    return choice_cluster, initial_state
 
 
 def kmeans_predict(
@@ -100,7 +134,7 @@ def kmeans_predict(
     :param device: (torch.device) device [default: 'cpu']
     :return: (torch.tensor) cluster ids
     """
-    print(f'predicting on {device}..')
+    #print(f'predicting on {device}..')
 
     if distance == 'euclidean':
         pairwise_distance_function = pairwise_distance
